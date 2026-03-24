@@ -860,7 +860,7 @@ tbody tr:last-child td{border-bottom:none}
 <script src="https://cdnjs.cloudflare.com/ajax/libs/jspdf/2.5.1/jspdf.umd.min.js"></script>
 
 <script>
-const API = "http://127.0.0.1:8000";
+const API = window.location.origin;
 // ─── SAMPLE DATA ──────────────────────────────────────────
 const SAMPLE_STUDENTS = [
   {id:1,name:"Alice Chen",email:"alice@school.edu",score:94,attendance:96,grade:"A",subject:"Math"},
