@@ -10,3 +10,4 @@ pymongo[srv]
 email-validator
 pdfplumber
 pypdf
+python-multipart
