@@ -668,7 +668,7 @@ tbody tr:last-child td{border-bottom:none}
       <div id="attendance-summary" style="color:var(--muted);font-size:.85rem;margin-bottom:.9rem"></div>
       <div class="attendance-card" style="margin-top:.8rem;padding:.9rem">
         <h3 style="margin-bottom:.4rem">Daily Attendance By RFID</h3>
-        <p style="margin-bottom:.8rem">Link cards once, then each scan appears here with the matched student name.</p>
+        <p style="margin-bottom:.8rem">Link cards once, then track attendance from the single attendance list below.</p>
         <div class="attendance-form">
           <input id="rfid-link-value" type="text" placeholder="RFID UID">
           <input id="rfid-link-student" type="text" list="student-options" placeholder="Link RFID to student">
@@ -680,7 +680,6 @@ tbody tr:last-child td{border-bottom:none}
         </div>
         <div id="rfid-last-scan" style="color:var(--muted);font-size:.85rem;margin-top:.85rem"></div>
         <div id="rfid-lecture-status" style="margin-top:.85rem"></div>
-        <div id="rfid-scan-list" style="margin-top:.85rem"></div>
       </div>
       <div class="attendance-card" style="margin-top:1rem;padding:.9rem">
         <h3 style="margin-bottom:.4rem">Manual Attendance Update</h3>
@@ -1884,7 +1883,6 @@ async function updateDashboardFromServer(){
   renderDashboard(currentStudents);
   renderAttendanceSettings();
   renderStudentOptions();
-  renderRecentRFIDScans();
   renderLectureAttendanceStatus();
 }
 
@@ -1980,36 +1978,6 @@ async function resetAttendanceForLecture(lectureId){
   }catch(err){
     statusEl.textContent = err.message || 'Attendance reset failed.';
   }
-}
-
-function renderRecentRFIDScans(){
-  const listEl = document.getElementById('rfid-scan-list');
-  if(!listEl) return;
-
-  const todaysScans = currentRecentScans.filter(scan=>isTodayTimestamp(scan.created_at));
-  if(!todaysScans.length){
-    listEl.innerHTML = '<div class="performance-placeholder">No RFID scans for today.</div>';
-    return;
-  }
-
-  listEl.innerHTML = todaysScans.map(scan=>{
-    const name = scan.student_name || 'Unknown card';
-    const when = scan.created_at ? new Date(scan.created_at).toLocaleString() : '';
-    const statusToken = String(scan.status || '').toLowerCase();
-    const statusLabel = statusToken === 'unmatched'
-      ? 'UNDEFINED'
-      : (statusToken === 'matched' || statusToken === 'duplicate' ? 'PRESENT' : statusToken.toUpperCase());
-    const statusColor = statusLabel === 'PRESENT' ? '#4fffb0' : '#f59e0b';
-    return `
-      <div class="attendance-list-row">
-        <span>${name}</span>
-        <span class="attendance-list-meta">
-          <span style="color:${statusColor};font-weight:700">${statusLabel}</span><br>
-          <span>${when}</span>
-        </span>
-      </div>
-    `;
-  }).join('');
 }
 
 function renderLectureAttendanceStatus(){
