@@ -648,6 +648,7 @@ tbody tr:last-child td{border-bottom:none}
       <div>
         <div class="dash-title" id="welcome-msg">Hello, Teacher 👋</div>
         <div class="dash-subtitle">Here's what's happening in your classroom today.</div>
+        <div id="dashboard-connection-status" class="performance-placeholder hidden" style="margin-top:.6rem;color:#fca5a5;border:1px solid rgba(248,113,113,.35);background:rgba(127,29,29,.16);padding:.65rem .8rem;border-radius:12px"></div>
       </div>
       <div style="display:flex;gap:.6rem;align-items:center">
         <button id="exportPDF" class="btn-accent2">⬇ Export Report</button>
@@ -859,7 +860,17 @@ tbody tr:last-child td{border-bottom:none}
 <script src="https://cdnjs.cloudflare.com/ajax/libs/jspdf/2.5.1/jspdf.umd.min.js"></script>
 
 <script>
-const API = window.location.origin;
+const API = (() => {
+  const explicitApi = window.STUDENT_ANALYSIS_API
+    || (typeof localStorage !== 'undefined' ? localStorage.getItem('student-analysis-api') : '');
+  if(explicitApi){
+    return String(explicitApi).replace(/\/+$/, '');
+  }
+  if(window.location.protocol === 'file:'){
+    return 'http://127.0.0.1:8000';
+  }
+  return window.location.origin.replace(/\/+$/, '');
+})();
 // ─── SAMPLE DATA ──────────────────────────────────────────
 const SAMPLE_STUDENTS = [
   {id:1,name:"Alice Chen",email:"alice@school.edu",score:94,attendance:96,grade:"A",subject:"Math"},
@@ -1086,7 +1097,7 @@ function formatStudentName(student, idx, meta){
   return `Student ${idx+1}`;
 }
 
-let currentMeta = createMeta(SAMPLE_STUDENTS);
+let currentMeta = createMeta([]);
 let currentSchema = {};
 
 // ─── CHART DEFAULTS ───────────────────────────────────────
@@ -1106,17 +1117,32 @@ function resetCharts(){
 
 // ─── CHART BUILDERS ───────────────────────────────────────
 
-function buildTrendChart(){
+function buildTrendChart(students, meta){
   destroyChart('trend');
   const ctx = document.getElementById('trendChart');
+  const scoreKey = meta?.scoreKey || 'score';
+  const points = students
+    .map((student, index)=>({
+      label: formatStudentName(student, index, meta),
+      score: toNumber(student?.[scoreKey]),
+    }))
+    .filter(item=>item.score !== null)
+    .sort((a,b)=>b.score-a.score)
+    .slice(0, 8);
+
+  if(!points.length){
+    return;
+  }
+
+  const averageScore = Math.round(points.reduce((sum, item)=>sum + item.score, 0) / points.length);
   chartInstances['trend'] = new Chart(ctx,{
     type:'bar',
     data:{
-      labels:['Sep','Oct','Nov','Dec','Jan','Feb','Mar','Apr','May'],
+      labels:points.map(item=>item.label),
       datasets:[
         {
-          label:'Class Avg Score',
-          data:[68,72,69,75,78,74,80,82,79],
+          label:'Score',
+          data:points.map(item=>item.score),
           backgroundColor:'rgba(79,255,176,0.15)',
           borderColor:'#4fffb0',
           borderWidth:2,
@@ -1124,8 +1150,8 @@ function buildTrendChart(){
           borderSkipped:false,
         },
         {
-          label:'Top Score',
-          data:[88,92,90,95,97,93,96,98,97],
+          label:'Selected Avg',
+          data:points.map(()=>averageScore),
           type:'line',
           tension:.4,
           borderColor:'#38bdf8',
@@ -1151,7 +1177,7 @@ function buildTrendChart(){
       },
       scales:{
         x:{grid:{display:false},ticks:{color:'#6b7280'}},
-        y:{grid:{color:'rgba(255,255,255,0.05)'},ticks:{color:'#6b7280'},min:50,max:100}
+        y:{grid:{color:'rgba(255,255,255,0.05)'},ticks:{color:'#6b7280'},beginAtZero:true}
       }
     }
   });
@@ -1513,7 +1539,7 @@ function renderDashboard(students){
   renderOutcomeLists(usableStudents, meta);
   renderSubjectProgress(usableStudents, meta);
 
-  buildTrendChart();
+  buildTrendChart(usableStudents, meta);
   buildDistChart(usableStudents, meta);
   buildSubjectChart(usableStudents, meta);
   buildGradeDonut(usableStudents, meta);
@@ -1801,7 +1827,7 @@ function renderSubjectProgress(students, meta){
   `).join('');
 }
 
-let currentStudents = SAMPLE_STUDENTS;
+let currentStudents = [];
 let currentUploadMode = 'combined';
 let dashboardRefreshTimer = null;
 const DASHBOARD_REFRESH_MS = 10000;
@@ -1842,8 +1868,29 @@ function setUploadMode(mode){
   if(uploadBtn) uploadBtn.textContent = config.button;
 }
 
+function setDashboardConnectionStatus(message, tone = 'error'){
+  const statusEl = document.getElementById('dashboard-connection-status');
+  if(!statusEl) return;
+  if(!message){
+    statusEl.textContent = '';
+    statusEl.classList.add('hidden');
+    return;
+  }
+  statusEl.textContent = message;
+  statusEl.classList.remove('hidden');
+  if(tone === 'ok'){
+    statusEl.style.color = '#86efac';
+    statusEl.style.borderColor = 'rgba(74,222,128,.35)';
+    statusEl.style.background = 'rgba(20,83,45,.18)';
+  }else{
+    statusEl.style.color = '#fca5a5';
+    statusEl.style.borderColor = 'rgba(248,113,113,.35)';
+    statusEl.style.background = 'rgba(127,29,29,.16)';
+  }
+}
+
 async function updateDashboardFromServer(){
-  let serverStudents = SAMPLE_STUDENTS;
+  let serverStudents = [];
   let serverSchema = {};
   let attendanceSettings = {};
   let recentScans = [];
@@ -1852,6 +1899,7 @@ async function updateDashboardFromServer(){
     const response = await fetch(`${API}/api/students`);
     if(response.ok){
       const payload = await response.json();
+      setDashboardConnectionStatus('');
       if(payload && payload.schema && typeof payload.schema === 'object'){
         serverSchema = payload.schema;
       }
@@ -1871,9 +1919,11 @@ async function updateDashboardFromServer(){
       }
     }else{
       console.warn("Failed to load students:", response.status);
+      setDashboardConnectionStatus(`Dashboard cannot load data right now. Backend responded with status ${response.status}. Check that the API server is running at ${API}.`);
     }
   }catch(err){
     console.warn("Unable to reach backend:", err);
+    setDashboardConnectionStatus(`Dashboard cannot reach the backend at ${API}. Start the FastAPI server, or set the correct API URL, then refresh.`);
   }
   currentSchema = serverSchema;
   currentStudents = serverStudents;
@@ -2079,6 +2129,7 @@ function showSection(id){
   });
   if(id === 'dashboard'){
     startDashboardAutoRefresh();
+    updateDashboardFromServer();
   }else{
     stopDashboardAutoRefresh();
   }
