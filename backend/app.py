@@ -15,7 +15,7 @@ import hashlib
 import pandas as pd
 import joblib
 from pathlib import Path
-from datetime import datetime
+from datetime import datetime, timezone
 from pymongo import MongoClient
 
 from sklearn.model_selection import train_test_split
@@ -2022,6 +2022,10 @@ def parse_datetime_value(value):
         return None
 
 
+def utc_now():
+    return datetime.now(timezone.utc)
+
+
 def is_hidden_attendance_event(event, settings=None):
     settings = settings or get_attendance_settings()
     hidden_lecture_ids = set(settings.get("hidden_lecture_ids") or [])
@@ -2211,7 +2215,7 @@ def rebuild_rfid_attendance_fields(df, schema=None):
 
 
 def save_attendance_settings(total_lectures=None, **extra_fields):
-    update_fields = {"updated_at": datetime.utcnow()}
+    update_fields = {"updated_at": utc_now()}
     if total_lectures is not None:
         update_fields["total_lectures"] = int(total_lectures)
     update_fields.update(extra_fields)
@@ -2334,7 +2338,7 @@ def link_rfid_to_student(payload: RFIDLinkPayload):
     ensure_text_column(existing_df, "rfid_linked_at")
 
     existing_df.loc[identifier_mask, rfid_column] = payload.rfid.strip().upper()
-    existing_df.loc[identifier_mask, "rfid_linked_at"] = datetime.utcnow().isoformat()
+    existing_df.loc[identifier_mask, "rfid_linked_at"] = utc_now().isoformat()
 
     matched_row = existing_df.loc[identifier_mask].iloc[0]
     matched_name = get_student_display_name(matched_row, schema=schema)
@@ -2348,7 +2352,7 @@ def link_rfid_to_student(payload: RFIDLinkPayload):
                 "rfid_display": payload.rfid.strip().upper(),
                 "student_name": matched_name,
                 "student_id": sanitize_value(matched_student_id),
-                "updated_at": datetime.utcnow(),
+                "updated_at": utc_now(),
             }
         },
         upsert=True,
@@ -2410,7 +2414,7 @@ def apply_rfid_attendance_scan(payload: RFIDAttendancePayload):
                 "student_name": mapped_identity.get("student_name") if mapped_identity else None,
                 "mapped_student_name": mapped_identity.get("student_name") if mapped_identity else None,
                 "mapped_student_id": mapped_identity.get("student_id") if mapped_identity else None,
-                "created_at": datetime.utcnow(),
+                "created_at": utc_now(),
             }
         )
         raise HTTPException(
@@ -2431,7 +2435,7 @@ def apply_rfid_attendance_scan(payload: RFIDAttendancePayload):
             {
                 "lecture_id": lecture_id,
                 "source": (payload.source or "rfid").strip(),
-                "created_at": datetime.utcnow(),
+                "created_at": utc_now(),
             }
         )
         existing_df["rfid_session_count"] = pd.to_numeric(
@@ -2452,14 +2456,14 @@ def apply_rfid_attendance_scan(payload: RFIDAttendancePayload):
                 "matched_by": matched_column,
                 "source": (payload.source or "rfid").strip(),
                 "status": "duplicate",
-                "created_at": datetime.utcnow(),
+                "created_at": utc_now(),
             }
         )
         settings = save_attendance_settings(
             last_scan_name=student_name,
             last_scan_rfid=payload.rfid.strip(),
             last_scan_lecture_id=lecture_id,
-            last_scan_at=datetime.utcnow().isoformat(),
+            last_scan_at=utc_now().isoformat(),
         )
         return build_scan_response(
             existing_df,
@@ -2490,14 +2494,14 @@ def apply_rfid_attendance_scan(payload: RFIDAttendancePayload):
             "matched_by": matched_column,
             "source": (payload.source or "rfid").strip(),
             "status": "matched",
-            "created_at": datetime.utcnow(),
+            "created_at": utc_now(),
         }
     )
 
     existing_df.loc[identifier_mask, "rfid_present_count"] = (
         pd.to_numeric(existing_df.loc[identifier_mask, "rfid_present_count"], errors="coerce").fillna(0) + 1
     )
-    existing_df.loc[identifier_mask, "rfid_last_scan_at"] = datetime.utcnow().isoformat()
+    existing_df.loc[identifier_mask, "rfid_last_scan_at"] = utc_now().isoformat()
     existing_df.loc[identifier_mask, "rfid_last_session_id"] = lecture_id
     existing_df.loc[identifier_mask, "rfid_scan_source"] = (payload.source or "rfid").strip()
 
@@ -2505,7 +2509,7 @@ def apply_rfid_attendance_scan(payload: RFIDAttendancePayload):
         last_scan_name=student_name,
         last_scan_rfid=payload.rfid.strip(),
         last_scan_lecture_id=lecture_id,
-        last_scan_at=datetime.utcnow().isoformat(),
+        last_scan_at=utc_now().isoformat(),
     )
 
     existing_df, attendance_key, effective_total = recalculate_attendance_metrics(existing_df, schema=schema)
@@ -2556,7 +2560,7 @@ def reset_rfid_attendance(payload: AttendanceResetPayload):
             last_scan_rfid=None,
             last_scan_lecture_id=None,
             last_scan_at=None,
-            dashboard_reset_at=datetime.utcnow().isoformat(),
+            dashboard_reset_at=utc_now().isoformat(),
         )
         return build_scan_response(
             existing_df,
@@ -2796,7 +2800,7 @@ def register(payload: RegisterPayload):
         "name": payload.name.strip(),
         "email": normalized_email,
         "password": hashlib.sha256(payload.password.encode()).hexdigest(),
-        "created_at": datetime.utcnow()
+        "created_at": utc_now()
     })
 
     return {"message": "Registration successful"}
@@ -2839,7 +2843,7 @@ def forgot_password(payload: ForgotPasswordPayload):
         {
             "$set": {
                 "password": hashlib.sha256(payload.new_password.encode()).hexdigest(),
-                "updated_at": datetime.utcnow(),
+                "updated_at": utc_now(),
             }
         },
     )
@@ -2884,7 +2888,7 @@ def update_user(payload: AdminUserUpdatePayload):
     update_fields = {
         "name": updated_name,
         "email": updated_email,
-        "updated_at": datetime.utcnow(),
+        "updated_at": utc_now(),
     }
 
     if payload.password:
