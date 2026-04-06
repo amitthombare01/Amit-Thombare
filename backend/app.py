@@ -1887,7 +1887,8 @@ def get_attendance_lecture_id(value=None):
         cleaned = str(value).strip()
         if cleaned:
             return cleaned
-    return datetime.now().strftime("%Y-%m-%d-%H-%M")
+    # Group RFID scans into a single 1-hour lecture window.
+    return datetime.now().strftime("%Y-%m-%d-%H")
 
 
 def ensure_numeric_column(df, column_name, default=0):
